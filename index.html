@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Baby Duck</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body onload="main()">
+    <canvas id="webgl" width="400" height="400">
+      Please use a browser that supports "canvas"
+    </canvas>
+
+    <p id="numdot">XXX</p>
+
+    <div class="control-group">
+      <label for="angleSlide">Camera Rotation:</label>
+      <input id="angleSlide" type="range" min="0" max="360" value="0" />
+    </div>
+
+    <div class="control-group">
+      <label for="wingUpperSlide">Wing Upper Joint:</label>
+      <input id="wingUpperSlide" type="range" min="-90" max="90" value="0" />
+      <div class="animation-controls">
+        Animation:
+        <button type="button" id="animationWingUpperOnButton">ON</button>
+        <button type="button" id="animationWingUpperOffButton">OFF</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label for="wingLowerSlide">Wing Lower Joint:</label>
+      <input id="wingLowerSlide" type="range" min="-90" max="90" value="0" />
+      <div class="animation-controls">
+        Animation:
+        <button type="button" id="animationWingLowerOnButton">ON</button>
+        <button type="button" id="animationWingLowerOffButton">OFF</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label for="wingHandSlide">Wing Hand Joint:</label>
+      <input id="wingHandSlide" type="range" min="-90" max="90" value="0" />
+      <div class="animation-controls">
+        Animation:
+        <button type="button" id="animationHandOnButton">ON</button>
+        <button type="button" id="animationHandOffButton">OFF</button>
+      </div>
+    </div>
+
+    <script src="lib/webgl-utils.js"></script>
+    <script src="lib/webgl-debug.js"></script>
+    <script src="lib/cuon-utils.js"></script>
+    <script src="lib/cuon-matrix-cse160.js"></script>
+    <script src="Circle.js"></script>
+    <script src="Traingle.js"></script>
+    <script src="Point.js"></script>
+    <script src="Cube.js"></script>
+    <script src="Sphere.js"></script>
+    <script src="World.js"></script>
+  </body>
+</html>
