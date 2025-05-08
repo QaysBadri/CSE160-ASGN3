@@ -1,19 +1,49 @@
 var VSHADER_SOURCE = `
+    precision mediump float;
     attribute vec4 a_Position;
+    attribute vec2 a_UV;
+    varying vec2 v_UV;
     uniform mat4 u_ModelMatrix;
     uniform mat4 u_GlobalRotateMatrix;
+    uniform mat4 u_ViewMatrix;
+    uniform mat4 u_ProjectionMatrix;
     void main() {
-      gl_Position = u_GlobalRotateMatrix * u_ModelMatrix * a_Position;
+      gl_Position = u_ProjectionMatrix * u_ViewMatrix * u_GlobalRotateMatrix * u_ModelMatrix * a_Position;
+      v_UV = a_UV;
   }`;
 
 var FSHADER_SOURCE = `
   precision mediump float;
+  varying vec2 v_UV;
   uniform vec4 u_FragColor;
+  uniform sampler2D u_Sampler;
+  uniform int u_whichTexture;
   void main() {
-    gl_FragColor = u_FragColor;
+    if (u_whichTexture == -2) {
+      gl_FragColor = u_FragColor;
+    } else if (u_whichTexture == -1) {
+      gl_FragColor = vec4(v_UV, 1.0, 1.0);
+    } else if (u_whichTexture == 0) {
+      gl_FragColor = texture2D(u_Sampler, v_UV);
+    } else {
+      gl_FragColor = vec4(1, 0.2, 0.2, 1);
+    }
   }`;
 
-let canvas, gl, a_Position, u_FragColor, u_ModelMatrix, u_GlobalRotateMatrix;
+let canvas,
+  gl,
+  a_Position,
+  a_UV,
+  u_FragColor,
+  u_ModelMatrix,
+  u_GlobalRotateMatrix,
+  u_ViewMatrix,
+  u_ProjectionMatrix,
+  u_Sampler,
+  u_whichTexture;
+
+let g_skyTextureObject = null;
+let g_grassTextureObject = null;
 
 let g_globalAngle = 0;
 let g_globalAngleX = 0;
@@ -38,6 +68,10 @@ let g_lastMouseY = -1;
 var g_startTime = performance.now() / 1000.0;
 var g_seconds = 0;
 
+var g_eye = [0, 0.5, 3];
+var g_at = [0, 0, 0];
+var g_up = [0, 1, 0];
+
 function setupWebGL() {
   canvas = document.getElementById("webgl");
   gl = canvas.getContext("webgl", { preserveDrawingBuffer: true });
@@ -54,25 +88,53 @@ function connectVariablesToGLSL() {
     return;
   }
   a_Position = gl.getAttribLocation(gl.program, "a_Position");
+  a_UV = gl.getAttribLocation(gl.program, "a_UV");
   u_FragColor = gl.getUniformLocation(gl.program, "u_FragColor");
   u_ModelMatrix = gl.getUniformLocation(gl.program, "u_ModelMatrix");
   u_GlobalRotateMatrix = gl.getUniformLocation(
     gl.program,
     "u_GlobalRotateMatrix"
   );
+  u_ViewMatrix = gl.getUniformLocation(gl.program, "u_ViewMatrix");
+  u_ProjectionMatrix = gl.getUniformLocation(gl.program, "u_ProjectionMatrix");
+  u_Sampler = gl.getUniformLocation(gl.program, "u_Sampler");
+  u_whichTexture = gl.getUniformLocation(gl.program, "u_whichTexture");
 
   if (
     a_Position < 0 ||
+    a_UV < 0 ||
     !u_FragColor ||
     !u_ModelMatrix ||
-    !u_GlobalRotateMatrix
+    !u_GlobalRotateMatrix ||
+    !u_ViewMatrix ||
+    !u_ProjectionMatrix ||
+    !u_Sampler ||
+    !u_whichTexture
   ) {
-    console.log("Failed to get storage location of GLSL variables");
+    console.error(
+      "Failed to get storage location of one or more GLSL variables."
+    );
+    console.log(
+      "a_Position:",
+      a_Position,
+      "a_UV:",
+      a_UV,
+      "u_FragColor:",
+      u_FragColor,
+      "u_ModelMatrix:",
+      u_ModelMatrix
+    );
+    console.log(
+      "u_GlobalRotateMatrix:",
+      u_GlobalRotateMatrix,
+      "u_ViewMatrix:",
+      u_ViewMatrix,
+      "u_ProjectionMatrix:",
+      u_ProjectionMatrix
+    );
+    console.log("u_Sampler:", u_Sampler, "u_whichTexture:", u_whichTexture);
     return;
   }
-
-  var identityM = new Matrix4();
-  gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
 }
 
 function addActionsForHtmlUI() {
@@ -138,6 +200,48 @@ function addActionsForHtmlUI() {
     });
 }
 
+function initTextures() {
+  g_skyTextureObject = loadSpecificTexture("images/sky.png");
+  g_grassTextureObject = loadSpecificTexture("images/grass.png");
+
+  if (u_Sampler) {
+    gl.uniform1i(u_Sampler, 0);
+  } else {
+    console.error(
+      "u_Sampler location not yet available in initTextures. Set gl.uniform1i(u_Sampler, 0) in main() or connectVariablesToGLSL()."
+    );
+  }
+}
+
+function loadSpecificTexture(imageSrc) {
+  var texture = gl.createTexture();
+  if (!texture) {
+    console.error("Failed to create the texture object for: " + imageSrc);
+    return null;
+  }
+  var image = new Image();
+  if (!image) {
+    console.error("Failed to create the image object for: " + imageSrc);
+    return null;
+  }
+  image.onload = function () {
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+    console.log("Texture loaded successfully: " + imageSrc);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  };
+  image.onerror = function () {
+    console.error("Error loading image: " + imageSrc);
+  };
+  image.src = imageSrc;
+  return texture;
+}
+
 function initEventHandlers() {
   canvas.onmousedown = function (ev) {
     if (ev.shiftKey && !g_pokeAnimationActive) {
@@ -149,26 +253,20 @@ function initEventHandlers() {
       g_lastMouseY = ev.clientY;
     }
   };
-
   canvas.onmouseup = function (ev) {
     g_isDragging = false;
   };
-
   canvas.onmousemove = function (ev) {
     if (g_isDragging) {
       let deltaX = ev.clientX - g_lastMouseX;
       let deltaY = ev.clientY - g_lastMouseY;
-
       g_globalAngle = (g_globalAngle - deltaX * 0.4) % 360;
       g_globalAngleX = g_globalAngleX - deltaY * 0.4;
-
       g_globalAngleX = Math.max(Math.min(g_globalAngleX, 90), -90);
-
       g_lastMouseX = ev.clientX;
       g_lastMouseY = ev.clientY;
     }
   };
-
   canvas.oncontextmenu = function (ev) {
     ev.preventDefault();
   };
@@ -179,9 +277,14 @@ function main() {
   connectVariablesToGLSL();
   addActionsForHtmlUI();
   initEventHandlers();
+  document.onkeydown = keydown;
+  initTextures();
 
-  gl.clearColor(0.8, 0.9, 1.0, 1.0);
+  if (u_Sampler) {
+    gl.uniform1i(u_Sampler, 0);
+  }
 
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
   requestAnimationFrame(tick);
 }
 
@@ -234,15 +337,78 @@ function updateAnimationAngles() {
   }
 }
 
+function keydown(ev) {
+  if (ev.keyCode == 68) {
+    // D
+    g_eye[0] += 0.2;
+  } else if (ev.keyCode == 65) {
+    // A
+    g_eye[0] -= 0.2;
+  } else if (ev.keyCode == 87) {
+    // W
+    g_eye[2] -= 0.2;
+  } else if (ev.keyCode == 83) {
+    // S
+    g_eye[2] += 0.2;
+  } else if (ev.keyCode == 81) {
+    // Q
+    g_globalAngle += 10;
+  } else if (ev.keyCode == 69) {
+    // E
+    g_globalAngle -= 10;
+  }
+}
+
 function renderAllShapes() {
   var startTime = performance.now();
 
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  var projMat = new Matrix4();
+  projMat.setPerspective(60, canvas.width / canvas.height, 0.1, 200);
+  gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMat.elements);
+
+  var viewMat = new Matrix4();
+  viewMat.setLookAt(
+    g_eye[0],
+    g_eye[1],
+    g_eye[2],
+    g_at[0],
+    g_at[1],
+    g_at[2],
+    g_up[0],
+    g_up[1],
+    g_up[2]
+  );
+  gl.uniformMatrix4fv(u_ViewMatrix, false, viewMat.elements);
 
   var globalRotMat = new Matrix4()
     .rotate(g_globalAngle, 0, 1, 0)
     .rotate(g_globalAngleX, 1, 0, 0);
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
+
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  gl.depthMask(false);
+  var sky = new Cube();
+  if (g_skyTextureObject) {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, g_skyTextureObject);
+  }
+  sky.textureNum = 0;
+  sky.matrix.scale(100, 100, 100);
+  sky.matrix.translate(-0.5, -0.5, -0.5);
+  sky.render();
+  gl.depthMask(true);
+
+  var floor = new Cube();
+  if (g_grassTextureObject) {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, g_grassTextureObject);
+  }
+  floor.textureNum = 0;
+  floor.matrix.translate(0, -0.75, 0);
+  floor.matrix.scale(20, 0.1, 20);
+  floor.matrix.translate(-0.5, 0, -0.5);
+  floor.render();
 
   var bodyColor = [1.0, 0.85, 0.0, 1.0];
   var headColor = [1.0, 0.9, 0.1, 1.0];
@@ -254,12 +420,14 @@ function renderAllShapes() {
 
   var body = new Cube();
   body.color = bodyColor;
+  body.textureNum = -2;
   body.matrix.setTranslate(-0.4, -0.1, -0.25);
   body.matrix.scale(0.6, 0.4, 0.5);
   body.render();
 
   var head = new Cube();
   head.color = headColor;
+  head.textureNum = -2;
   head.matrix.setTranslate(0.3, 0.3, 0);
   head.matrix.rotate(g_headAngle, 0, 0, 1);
   var headBaseMatrix = new Matrix4(head.matrix);
@@ -269,6 +437,9 @@ function renderAllShapes() {
 
   var eyeL = new Sphere();
   eyeL.color = eyeColor;
+  if (typeof eyeL.textureNum !== "undefined") {
+    eyeL.textureNum = -2;
+  }
   eyeL.segments = 8;
   eyeL.bands = 6;
   eyeL.matrix = new Matrix4(headBaseMatrix);
@@ -278,6 +449,9 @@ function renderAllShapes() {
 
   var eyeR = new Sphere();
   eyeR.color = eyeColor;
+  if (typeof eyeR.textureNum !== "undefined") {
+    eyeR.textureNum = -2;
+  }
   eyeR.segments = 8;
   eyeR.bands = 6;
   eyeR.matrix = new Matrix4(headBaseMatrix);
@@ -287,6 +461,7 @@ function renderAllShapes() {
 
   var beak = new Cube();
   beak.color = beakColor;
+  beak.textureNum = -2;
   beak.matrix = new Matrix4(headBaseMatrix);
   beak.matrix.translate(0.16, 0, 0);
   beak.matrix.scale(0.2, 0.075, 0.26);
@@ -295,6 +470,7 @@ function renderAllShapes() {
 
   var wingUpperL = new Cube();
   wingUpperL.color = wingColor;
+  wingUpperL.textureNum = -2;
   wingUpperL.matrix.setTranslate(-0.11, 0.1, 0.29);
   wingUpperL.matrix.rotate(g_wingUpperAngle, 1, 0, 0);
   var wingUpperLMatrix = new Matrix4(wingUpperL.matrix);
@@ -304,6 +480,7 @@ function renderAllShapes() {
 
   var wingLowerL = new Cube();
   wingLowerL.color = wingColor;
+  wingLowerL.textureNum = -2;
   wingLowerL.matrix = wingUpperLMatrix;
   wingLowerL.matrix.translate(0.3, 0, 0);
   wingLowerL.matrix.rotate(g_wingLowerAngle, 0, 0, 1);
@@ -314,6 +491,7 @@ function renderAllShapes() {
 
   var wingHandL = new Cube();
   wingHandL.color = handColor;
+  wingHandL.textureNum = -2;
   wingHandL.matrix = wingLowerLMatrix;
   wingHandL.matrix.translate(0.25, 0, 0);
   wingHandL.matrix.rotate(g_wingHandAngle, 0, 1, 0);
@@ -323,6 +501,7 @@ function renderAllShapes() {
 
   var wingUpperR = new Cube();
   wingUpperR.color = wingColor;
+  wingUpperR.textureNum = -2;
   wingUpperR.matrix.setTranslate(-0.11, 0.1, -0.29);
   wingUpperR.matrix.rotate(-g_wingUpperAngle, 1, 0, 0);
   var wingUpperRMatrix = new Matrix4(wingUpperR.matrix);
@@ -332,6 +511,7 @@ function renderAllShapes() {
 
   var wingLowerR = new Cube();
   wingLowerR.color = wingColor;
+  wingLowerR.textureNum = -2;
   wingLowerR.matrix = wingUpperRMatrix;
   wingLowerR.matrix.translate(0.3, 0, 0);
   wingLowerR.matrix.rotate(-g_wingLowerAngle, 0, 0, 1);
@@ -342,6 +522,7 @@ function renderAllShapes() {
 
   var wingHandR = new Cube();
   wingHandR.color = handColor;
+  wingHandR.textureNum = -2;
   wingHandR.matrix = wingLowerRMatrix;
   wingHandR.matrix.translate(0.25, 0, 0);
   wingHandR.matrix.rotate(-g_wingHandAngle, 0, 1, 0);
@@ -353,6 +534,7 @@ function renderAllShapes() {
   const lowerLegHeight = 0.15;
   var legUpL = new Cube();
   legUpL.color = legColor;
+  legUpL.textureNum = -2;
   legUpL.matrix.setTranslate(-0.15, -0.1, 0.15);
   var legUpLMatrix = new Matrix4(legUpL.matrix);
   legUpL.matrix.scale(0.08, upperLegHeight, 0.08);
@@ -361,6 +543,7 @@ function renderAllShapes() {
 
   var legLowL = new Cube();
   legLowL.color = legColor;
+  legLowL.textureNum = -2;
   legLowL.matrix = legUpLMatrix;
   legLowL.matrix.translate(0, -upperLegHeight, 0);
   var legLowLMatrix = new Matrix4(legLowL.matrix);
@@ -370,6 +553,7 @@ function renderAllShapes() {
 
   var footL = new Cube();
   footL.color = legColor;
+  footL.textureNum = -2;
   footL.matrix = legLowLMatrix;
   footL.matrix.translate(0, -lowerLegHeight, 0.04);
   footL.matrix.scale(0.18, 0.04, 0.15);
@@ -378,6 +562,7 @@ function renderAllShapes() {
 
   var legUpR = new Cube();
   legUpR.color = legColor;
+  legUpR.textureNum = -2;
   legUpR.matrix.setTranslate(-0.15, -0.1, -0.15);
   var legUpRMatrix = new Matrix4(legUpR.matrix);
   legUpR.matrix.scale(0.08, upperLegHeight, 0.08);
@@ -386,6 +571,7 @@ function renderAllShapes() {
 
   var legLowR = new Cube();
   legLowR.color = legColor;
+  legLowR.textureNum = -2;
   legLowR.matrix = legUpRMatrix;
   legLowR.matrix.translate(0, -upperLegHeight, 0);
   var legLowRMatrix = new Matrix4(legLowR.matrix);
@@ -395,6 +581,7 @@ function renderAllShapes() {
 
   var footR = new Cube();
   footR.color = legColor;
+  footR.textureNum = -2;
   footR.matrix = legLowRMatrix;
   footR.matrix.translate(0, -lowerLegHeight, 0.04);
   footR.matrix.scale(0.18, 0.04, 0.15);
