@@ -72,6 +72,21 @@ var g_eye = [0, 0.5, 3];
 var g_at = [0, 0, 0];
 var g_up = [0, 1, 0];
 
+let grassBlocks = [];
+
+function addGrassBlock(x, y, z) {
+  let grass = new Cube();
+  if (g_grassTextureObject) {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, g_grassTextureObject);
+  }
+  grass.textureNum = 0;
+  grass.color = [0.1, 0.8, 0.1, 1.0];
+  grass.matrix.setTranslate(x, y - 0.6, z);
+  grass.matrix.scale(0.5, 0.5, 0.5);
+  grassBlocks.push(grass);
+}
+
 function setupWebGL() {
   canvas = document.getElementById("webgl");
   gl = canvas.getContext("webgl", { preserveDrawingBuffer: true });
@@ -252,6 +267,12 @@ function initEventHandlers() {
       g_lastMouseX = ev.clientX;
       g_lastMouseY = ev.clientY;
     }
+
+    if (ev.button === 0) {
+      handleLeftClick(ev);
+    } else if (ev.button === 2) {
+      handleRightClick(ev);
+    }
   };
   canvas.onmouseup = function (ev) {
     g_isDragging = false;
@@ -272,6 +293,41 @@ function initEventHandlers() {
   };
 }
 
+function handleLeftClick(event) {
+  let rect = canvas.getBoundingClientRect();
+  let x = event.clientX - rect.left;
+  let y = event.clientY - rect.top;
+
+  let webGLX = (x / canvas.width) * 2 - 1;
+  let webGLY = -((y / canvas.height) * 2 - 1);
+
+  for (let i = grassBlocks.length - 1; i >= 0; i--) {
+    let grass = grassBlocks[i];
+    let grassX = grass.matrix.elements[12];
+    let grassY = grass.matrix.elements[13];
+    let grassZ = grass.matrix.elements[14];
+
+    let distance = Math.sqrt(
+      Math.pow(webGLX - grassX, 2) + Math.pow(webGLY - grassY, 2)
+    );
+    if (distance < 5) {
+      grassBlocks.splice(i, 1);
+      return;
+    }
+  }
+}
+
+function handleRightClick(event) {
+  let rect = canvas.getBoundingClientRect();
+  let x = event.clientX - rect.left;
+  let y = event.clientY - rect.top;
+
+  let webGLX = (x / canvas.width) * 2 - 1;
+  let webGLY = -((y / canvas.height) * 2 - 1);
+
+  addGrassBlock(webGLX, 0, webGLY);
+}
+
 function main() {
   setupWebGL();
   connectVariablesToGLSL();
@@ -285,6 +341,13 @@ function main() {
   }
 
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+  for (let i = 0; i < 15; i++) {
+    let x = (Math.random() - 0.5) * 7;
+    let z = (Math.random() - 0.5) * 7;
+    addGrassBlock(x, 0, z);
+  }
+
   requestAnimationFrame(tick);
 }
 
@@ -339,22 +402,16 @@ function updateAnimationAngles() {
 
 function keydown(ev) {
   if (ev.keyCode == 68) {
-    // D
     g_eye[0] += 0.2;
   } else if (ev.keyCode == 65) {
-    // A
     g_eye[0] -= 0.2;
   } else if (ev.keyCode == 87) {
-    // W
     g_eye[2] -= 0.2;
   } else if (ev.keyCode == 83) {
-    // S
     g_eye[2] += 0.2;
   } else if (ev.keyCode == 81) {
-    // Q
     g_globalAngle += 10;
   } else if (ev.keyCode == 69) {
-    // E
     g_globalAngle -= 10;
   }
 }
@@ -587,6 +644,10 @@ function renderAllShapes() {
   footR.matrix.scale(0.18, 0.04, 0.15);
   footR.matrix.translate(-0.5, -0.5, -0.75);
   footR.render();
+
+  for (let grass of grassBlocks) {
+    grass.render();
+  }
 
   var duration = performance.now() - startTime;
   sendTextToHTML(
