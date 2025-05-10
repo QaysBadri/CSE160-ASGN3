@@ -331,7 +331,6 @@ function handleLeftClick(event) {
     nearestDist = Infinity;
 
   grassBlocks.forEach((block, i) => {
-    // each block is a 0.5×0.5×0.5 cube at (x,y,z)
     const e = block.matrix.elements;
     const min = [e[12], e[13], e[14]];
     const max = [min[0] + 0.5, min[1] + 0.5, min[2] + 0.5];
