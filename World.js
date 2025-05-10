@@ -65,10 +65,13 @@ let g_isDragging = false;
 let g_lastMouseX = -1;
 let g_lastMouseY = -1;
 
+let g_yaw = 242;
+let g_pitch = 0;
+
 var g_startTime = performance.now() / 1000.0;
 var g_seconds = 0;
 
-var g_eye = [0, 0.5, 3];
+var g_eye = [4, 0.5, 2];
 var g_at = [0, 0, 0];
 var g_up = [0, 1, 0];
 
@@ -153,10 +156,6 @@ function connectVariablesToGLSL() {
 }
 
 function addActionsForHtmlUI() {
-  document.getElementById("angleSlide").addEventListener("input", function () {
-    g_globalAngle = parseFloat(this.value);
-  });
-
   document
     .getElementById("wingUpperSlide")
     .addEventListener("input", function () {
@@ -281,9 +280,8 @@ function initEventHandlers() {
     if (g_isDragging) {
       let deltaX = ev.clientX - g_lastMouseX;
       let deltaY = ev.clientY - g_lastMouseY;
-      g_globalAngle = (g_globalAngle - deltaX * 0.4) % 360;
-      g_globalAngleX = g_globalAngleX - deltaY * 0.4;
-      g_globalAngleX = Math.max(Math.min(g_globalAngleX, 90), -90);
+      g_yaw = (g_yaw - deltaX * 0.4) % 360;
+      g_pitch = Math.max(Math.min(g_pitch - deltaY * 0.4, 90), -90);
       g_lastMouseX = ev.clientX;
       g_lastMouseY = ev.clientY;
     }
@@ -401,18 +399,31 @@ function updateAnimationAngles() {
 }
 
 function keydown(ev) {
-  if (ev.keyCode == 68) {
-    g_eye[0] += 0.2;
-  } else if (ev.keyCode == 65) {
-    g_eye[0] -= 0.2;
-  } else if (ev.keyCode == 87) {
-    g_eye[2] -= 0.2;
-  } else if (ev.keyCode == 83) {
-    g_eye[2] += 0.2;
-  } else if (ev.keyCode == 81) {
-    g_globalAngle += 10;
-  } else if (ev.keyCode == 69) {
-    g_globalAngle -= 10;
+  const speed = 0.2;
+  const radYaw = (g_yaw * Math.PI) / 180;
+  switch (ev.keyCode) {
+    case 87: // W
+      g_eye[0] += Math.sin(radYaw) * speed;
+      g_eye[2] += Math.cos(radYaw) * speed;
+      break;
+    case 83: // S
+      g_eye[0] -= Math.sin(radYaw) * speed;
+      g_eye[2] -= Math.cos(radYaw) * speed;
+      break;
+    case 68: // D
+      g_eye[0] -= Math.cos(radYaw) * speed;
+      g_eye[2] += Math.sin(radYaw) * speed;
+      break;
+    case 65: // A
+      g_eye[0] += Math.cos(radYaw) * speed;
+      g_eye[2] -= Math.sin(radYaw) * speed;
+      break;
+    case 81: // Q
+      g_yaw = (g_yaw + 10) % 360;
+      break;
+    case 69: // E
+      g_yaw = (g_yaw - 10) % 360;
+      break;
   }
 }
 
@@ -423,24 +434,31 @@ function renderAllShapes() {
   projMat.setPerspective(60, canvas.width / canvas.height, 0.1, 200);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMat.elements);
 
+  // disable world rotation
+  var globalRotMat = new Matrix4();
+  gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
+
+  // compute camera direction
+  const radY = (g_yaw * Math.PI) / 180;
+  const radP = (g_pitch * Math.PI) / 180;
+  const dirX = Math.cos(radP) * Math.sin(radY);
+  const dirY = Math.sin(radP);
+  const dirZ = Math.cos(radP) * Math.cos(radY);
+  const lookAt = [g_eye[0] + dirX, g_eye[1] + dirY, g_eye[2] + dirZ];
+
   var viewMat = new Matrix4();
   viewMat.setLookAt(
     g_eye[0],
     g_eye[1],
     g_eye[2],
-    g_at[0],
-    g_at[1],
-    g_at[2],
+    lookAt[0],
+    lookAt[1],
+    lookAt[2],
     g_up[0],
     g_up[1],
     g_up[2]
   );
   gl.uniformMatrix4fv(u_ViewMatrix, false, viewMat.elements);
-
-  var globalRotMat = new Matrix4()
-    .rotate(g_globalAngle, 0, 1, 0)
-    .rotate(g_globalAngleX, 1, 0, 0);
-  gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
