@@ -2,45 +2,85 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Baby Duck</title>
+    <title>Duck</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-
   <body onload="main()">
-    <canvas id="webgl" width="400" height="400">
-      Please use a browser that supports "canvas"
-    </canvas>
+    <div class="main-layout">
+      <div class="canvas-area">
+        <canvas id="webgl" width="400" height="400">
+          Please use a browser that supports "canvas"
+        </canvas>
+        <p id="numdot">XXX</p>
 
-    <p id="numdot">XXX</p>
+        <div class="control-group">
+          <label for="wingUpperSlide">Wing Upper Joint:</label>
+          <input
+            id="wingUpperSlide"
+            type="range"
+            min="-90"
+            max="90"
+            value="0"
+          />
+          <div class="animation-controls">
+            Animation:
+            <button id="animationWingUpperOnButton">ON</button>
+            <button id="animationWingUpperOffButton">OFF</button>
+          </div>
+        </div>
 
-    <div class="control-group">
-      <label for="wingUpperSlide">Wing Upper Joint:</label>
-      <input id="wingUpperSlide" type="range" min="-90" max="90" value="0" />
-      <div class="animation-controls">
-        Animation:
-        <button type="button" id="animationWingUpperOnButton">ON</button>
-        <button type="button" id="animationWingUpperOffButton">OFF</button>
+        <div class="control-group">
+          <label for="wingLowerSlide">Wing Lower Joint:</label>
+          <input
+            id="wingLowerSlide"
+            type="range"
+            min="-90"
+            max="90"
+            value="0"
+          />
+          <div class="animation-controls">
+            Animation:
+            <button id="animationWingLowerOnButton">ON</button>
+            <button id="animationWingLowerOffButton">OFF</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="wingHandSlide">Wing Hand Joint:</label>
+          <input id="wingHandSlide" type="range" min="-90" max="90" value="0" />
+          <div class="animation-controls">
+            Animation:
+            <button id="animationHandOnButton">ON</button>
+            <button id="animationHandOffButton">OFF</button>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="control-group">
-      <label for="wingLowerSlide">Wing Lower Joint:</label>
-      <input id="wingLowerSlide" type="range" min="-90" max="90" value="0" />
-      <div class="animation-controls">
-        Animation:
-        <button type="button" id="animationWingLowerOnButton">ON</button>
-        <button type="button" id="animationWingLowerOffButton">OFF</button>
-      </div>
-    </div>
+      <aside class="sidebar">
+        <iframe
+          class="video-embed"
+          src="https://www.youtube.com/embed/ZS4Bpr2BgnE?start=179"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+        >
+        </iframe>
 
-    <div class="control-group">
-      <label for="wingHandSlide">Wing Hand Joint:</label>
-      <input id="wingHandSlide" type="range" min="-90" max="90" value="0" />
-      <div class="animation-controls">
-        Animation:
-        <button type="button" id="animationHandOnButton">ON</button>
-        <button type="button" id="animationHandOffButton">OFF</button>
-      </div>
+        <h3>Story</h3>
+        <p>
+          Just like the “Can’t Help Myself” robot, in a distant future this duck
+          is enshrined in a cutting-edge museum, compelled to perform its
+          endless mechanical dance for eager visitors—doomed to repeat its
+          routine forever.
+        </p>
+
+        <h3>Notes for Grader</h3>
+        <p>
+          To delete a block, left-click when it’s centered in the canvas. To
+          place a block, right-click on or adjacent to an existing block—you can
+          only add new blocks next to one that’s already in the world.
+        </p>
+      </aside>
     </div>
 
     <script src="lib/webgl-utils.js"></script>

@@ -66,7 +66,7 @@ let g_lastMouseX = -1;
 let g_lastMouseY = -1;
 
 let g_yaw = 242;
-let g_pitch = 0;
+let g_pitch = -10;
 
 var g_startTime = performance.now() / 1000.0;
 var g_seconds = 0;
@@ -257,26 +257,31 @@ function loadSpecificTexture(imageSrc) {
 }
 
 function initEventHandlers() {
-  canvas.onmousedown = function (ev) {
+  canvas.oncontextmenu = (ev) => ev.preventDefault();
+
+  canvas.onmousedown = (ev) => {
+    ev.preventDefault();
     if (ev.shiftKey && !g_pokeAnimationActive) {
       g_pokeAnimationActive = true;
       g_pokeStartTime = g_seconds;
-    } else if (!ev.shiftKey) {
+    } else {
       g_isDragging = true;
       g_lastMouseX = ev.clientX;
       g_lastMouseY = ev.clientY;
     }
 
-    if (ev.button === 0) {
+    if (ev.button === 0 && !ev.ctrlKey) {
       handleLeftClick(ev);
-    } else if (ev.button === 2) {
+    } else if (ev.button === 2 || (ev.button === 0 && ev.ctrlKey)) {
       handleRightClick(ev);
     }
   };
-  canvas.onmouseup = function (ev) {
+
+  canvas.onmouseup = (ev) => {
     g_isDragging = false;
   };
-  canvas.onmousemove = function (ev) {
+
+  canvas.onmousemove = (ev) => {
     if (g_isDragging) {
       let deltaX = ev.clientX - g_lastMouseX;
       let deltaY = ev.clientY - g_lastMouseY;
@@ -286,44 +291,97 @@ function initEventHandlers() {
       g_lastMouseY = ev.clientY;
     }
   };
-  canvas.oncontextmenu = function (ev) {
-    ev.preventDefault();
-  };
+}
+
+function intersectRayBox(orig, dir, min, max) {
+  let tmin = (min[0] - orig[0]) / dir[0],
+    tmax = (max[0] - orig[0]) / dir[0];
+  if (tmin > tmax) [tmin, tmax] = [tmax, tmin];
+
+  let tymin = (min[1] - orig[1]) / dir[1],
+    tymax = (max[1] - orig[1]) / dir[1];
+  if (tymin > tymax) [tymin, tymax] = [tymax, tymin];
+  if (tmin > tymax || tymin > tmax) return null;
+  if (tymin > tmin) tmin = tymin;
+  if (tymax < tmax) tmax = tymax;
+
+  let tzmin = (min[2] - orig[2]) / dir[2],
+    tzmax = (max[2] - orig[2]) / dir[2];
+  if (tzmin > tzmax) [tzmin, tzmax] = [tzmax, tzmin];
+  if (tmin > tzmax || tzmin > tmax) return null;
+  if (tzmin > tmin) tmin = tzmin;
+
+  return { distance: tmin };
+}
+
+function getCameraRay() {
+  const ry = (g_yaw * Math.PI) / 180,
+    rp = (g_pitch * Math.PI) / 180;
+  const dir = [
+    Math.cos(rp) * Math.sin(ry),
+    Math.sin(rp),
+    Math.cos(rp) * Math.cos(ry),
+  ];
+  return { origin: [...g_eye], dir };
 }
 
 function handleLeftClick(event) {
-  let rect = canvas.getBoundingClientRect();
-  let x = event.clientX - rect.left;
-  let y = event.clientY - rect.top;
+  const { origin, dir } = getCameraRay();
+  let nearestIdx = -1,
+    nearestDist = Infinity;
 
-  let webGLX = (x / canvas.width) * 2 - 1;
-  let webGLY = -((y / canvas.height) * 2 - 1);
-
-  for (let i = grassBlocks.length - 1; i >= 0; i--) {
-    let grass = grassBlocks[i];
-    let grassX = grass.matrix.elements[12];
-    let grassY = grass.matrix.elements[13];
-    let grassZ = grass.matrix.elements[14];
-
-    let distance = Math.sqrt(
-      Math.pow(webGLX - grassX, 2) + Math.pow(webGLY - grassY, 2)
-    );
-    if (distance < 5) {
-      grassBlocks.splice(i, 1);
-      return;
+  grassBlocks.forEach((block, i) => {
+    // each block is a 0.5×0.5×0.5 cube at (x,y,z)
+    const e = block.matrix.elements;
+    const min = [e[12], e[13], e[14]];
+    const max = [min[0] + 0.5, min[1] + 0.5, min[2] + 0.5];
+    const hit = intersectRayBox(origin, dir, min, max);
+    if (hit && hit.distance < nearestDist) {
+      nearestDist = hit.distance;
+      nearestIdx = i;
     }
+  });
+
+  if (nearestIdx !== -1) {
+    grassBlocks.splice(nearestIdx, 1);
   }
 }
 
 function handleRightClick(event) {
-  let rect = canvas.getBoundingClientRect();
-  let x = event.clientX - rect.left;
-  let y = event.clientY - rect.top;
+  const { origin, dir } = getCameraRay();
+  let nearest = null,
+    nearestDist = Infinity;
 
-  let webGLX = (x / canvas.width) * 2 - 1;
-  let webGLY = -((y / canvas.height) * 2 - 1);
+  grassBlocks.forEach((block, i) => {
+    const e = block.matrix.elements;
+    const min = [e[12], e[13], e[14]];
+    const max = [min[0] + 0.5, min[1] + 0.5, min[2] + 0.5];
+    const hit = intersectRayBox(origin, dir, min, max);
+    if (hit && hit.distance < nearestDist) {
+      nearestDist = hit.distance;
+      nearest = { block, idx: i, min, max };
+    }
+  });
 
-  addGrassBlock(webGLX, 0, webGLY);
+  if (!nearest) return;
+
+  const hitPoint = origin.map((o, j) => o + dir[j] * nearestDist);
+
+  const eps = 0.001;
+  let normal = [0, 0, 0];
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(hitPoint[i] - nearest.min[i]) < eps) normal[i] = -1;
+    else if (Math.abs(hitPoint[i] - nearest.max[i]) < eps) normal[i] = 1;
+  }
+
+  const px =
+    nearest.min[0] + (normal[0] === 1 ? 0.5 : normal[0] === -1 ? -0.5 : 0);
+  const py =
+    nearest.min[1] + (normal[1] === 1 ? 0.5 : normal[1] === -1 ? -0.5 : 0);
+  const pz =
+    nearest.min[2] + (normal[2] === 1 ? 0.5 : normal[2] === -1 ? -0.5 : 0);
+
+  addGrassBlock(px, py + 0.6, pz);
 }
 
 function main() {
@@ -434,11 +492,9 @@ function renderAllShapes() {
   projMat.setPerspective(60, canvas.width / canvas.height, 0.1, 200);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMat.elements);
 
-  // disable world rotation
   var globalRotMat = new Matrix4();
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
-  // compute camera direction
   const radY = (g_yaw * Math.PI) / 180;
   const radP = (g_pitch * Math.PI) / 180;
   const dirX = Math.cos(radP) * Math.sin(radY);
